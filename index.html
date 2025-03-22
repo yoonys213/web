@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인 및 게시판</title>
+    <style>
+        /* 기존 CSS 스타일 유지 */
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            width: 90%;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            background-color: white;
+        }
+        .hidden {
+            display: none;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .signup-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .login-btn {
+            background-color: #008CBA;
+            color: white;
+        }
+        .switch-btn {
+            background-color: #f1f1f1;
+            color: black;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            resize: vertical;
+        }
+        .post {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            word-wrap: break-word;
+        }
+        .reply {
+            margin-left: 30px;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            word-wrap: break-word;
+        }
+        .reply-input {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .reply-input textarea {
+            flex: 3;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            resize: vertical;
+        }
+        .reply-input button {
+            flex: 1;
+            padding: 10px 15px;
+            font-size: 14px;
+            background-color: #28a745;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .author {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+    <!-- Firebase SDK 로드 (compat 버전 사용) -->
+    <script src="https://www.gstatic.com/firebasejs/9.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.9.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.9.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <!-- 로그인 및 회원가입 폼 -->
+    <div id="loginContainer" class="container">
+        <!-- 회원가입 폼 -->
+        <form id="signUpForm">
+            <h2>회원가입</h2>
+            <input type="email" id="signUpEmail" placeholder="이메일 입력" required /><br><br>
+            <input type="password" id="signUpPassword" placeholder="비밀번호 입력" required /><br><br>
+            <button type="submit" class="signup-btn">회원가입 하기</button>
+            <button type="button" id="goToLogin" class="switch-btn">로그인 하러 가기</button>
+        </form>
+
+        <!-- 로그인 폼 -->
+        <form id="signInForm" class="hidden">
+            <h2>로그인</h2>
+            <input type="email" id="signInEmail" placeholder="이메일 입력" required /><br><br>
+            <input type="password" id="signInPassword" placeholder="비밀번호 입력" required /><br><br>
+            <button type="submit" class="login-btn">로그인 하기</button>
+            <button type="button" id="goToSignUp" class="switch-btn">회원가입 하러 가기</button>
+        </form>
+    </div>
+
+    <!-- 게시판 -->
+    <div id="boardContainer" class="container hidden">
+        <h1>XSS 테스트 게시판</h1>
+        <textarea id="postInput" placeholder="질문을 입력하세요"></textarea>
+        <button onclick="savePost()">게시하기</button>
+
+        <!-- 게시글 목록 -->
+        <div id="postList"></div>
+    </div>
+
+    <script>
+        // Firebase 설정
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPsXsZ6N-1Hb0oZ6TfuqZRnwoAwekV9O8",
+            authDomain: "easylogin-69172.firebaseapp.com",
+            projectId: "easylogin-69172",
+            storageBucket: "easylogin-69172.appspot.com",
+            messagingSenderId: "507786873248",
+            appId: "1:507786873248:web:a4effc2440a8e81bfbfcc5",
+            measurementId: "G-X3G15GWG5T",
+            databaseURL: "https://loginsite-2f1a0-default-rtdb.firebaseio.com/", // 본인의 databaseURL로 변경
+        };
+
+        // Firebase 초기화
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        // 이메일 마스킹 함수
+        function maskEmail(email) {
+            if (!email || typeof email !== 'string') {
+                return '익명';
+            }
+            const [username, domain] = email.split('@');
+            if (!username || !domain) {
+                return email;
+            }
+            const maskedUsername = username.slice(0, 2) + '**';
+            return `${maskedUsername}@${domain}`;
+        }
+
+        // 회원가입
+        document.getElementById('signUpForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const email = document.getElementById('signUpEmail').value;
+            const password = document.getElementById('signUpPassword').value;
+
+            firebase.auth().createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    alert('회원가입 성공! 로그인해주세요.');
+                    document.getElementById('signUpForm').classList.add('hidden');
+                    document.getElementById('signInForm').classList.remove('hidden');
+                })
+                .catch((error) => {
+                    alert('회원가입 실패: ' + error.message);
+                });
+        });
+
+        // 로그인
+        document.getElementById('signInForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const email = document.getElementById('signInEmail').value;
+            const password = document.getElementById('signInPassword').value;
+
+            firebase.auth().signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    alert('로그인 성공!');
+                    localStorage.setItem('userEmail', email);
+                    document.getElementById('loginContainer').classList.add('hidden');
+                    document.getElementById('boardContainer').classList.remove('hidden');
+                })
+                .catch((error) => {
+                    alert('로그인 실패: ' + error.message);
+                });
+        });
+
+        // 로그인/회원가입 화면 전환
+        document.getElementById('goToLogin').addEventListener('click', () => {
+            document.getElementById('signUpForm').classList.add('hidden');
+            document.getElementById('signInForm').classList.remove('hidden');
+        });
+
+        document.getElementById('goToSignUp').addEventListener('click', () => {
+            document.getElementById('signUpForm').classList.remove('hidden');
+            document.getElementById('signInForm').classList.add('hidden');
+        });
+
+        // 게시글 저장
+        function savePost() {
+            const postInput = document.getElementById('postInput').value;
+            if (postInput.trim() === "") {
+                alert("내용을 입력하세요!");
+                return;
+            }
+
+            // 로컬 스토리지에서 사용자 이메일 가져오기
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                alert("로그인이 필요합니다.");
+                return;
+            }
+
+            // Firebase에 게시글 저장
+            database.ref('posts').push().set({
+                content: postInput,
+                author: userEmail,
+                timestamp: new Date().toISOString(),
+                replies: {}
+            });
+
+            // 입력 필드 초기화
+            document.getElementById('postInput').value = "";
+        }
+
+        // 답글 저장
+        function saveReply(postId, replyInput) {
+            if (replyInput.trim() === "") {
+                alert("답글을 입력하세요!");
+                return;
+            }
+
+            // 로컬 스토리지에서 사용자 이메일 가져오기
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                alert("로그인이 필요합니다.");
+                return;
+            }
+
+            // Firebase에 답글 저장
+            database.ref(`posts/${postId}/replies`).push().set({
+                content: replyInput,
+                author: userEmail,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // 게시글 삭제
+        function deletePost(postId, authorEmail) {
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail !== authorEmail) {
+                alert("작성자만 삭제할 수 있습니다.");
+                return;
+            }
+
+            if (confirm("정말로 삭제하시겠습니까?")) {
+                database.ref(`posts/${postId}`).remove();
+            }
+        }
+
+        // 게시글 및 답글 불러오기
+        database.ref('posts').orderByChild('timestamp').on('value', (snapshot) => {
+            const posts = snapshot.val();
+            const postList = document.getElementById('postList');
+            postList.innerHTML = ""; // 기존 목록 초기화
+
+            if (posts) {
+                // 게시글을 배열로 변환하고 역순으로 정렬
+                const postsArray = Object.entries(posts).reverse();
+
+                for (let [postId, post] of postsArray) {
+                    // 게시글 표시
+                    const postElement = document.createElement('div');
+                    postElement.className = 'post';
+                    postElement.innerHTML = `
+                        <div class="author">작성자: ${maskEmail(post.author)}</div>
+                        <div>${post.content}</div>
+                        <button class="delete-btn" onclick="deletePost('${postId}', '${post.author}')">삭제</button>
+                    `;
+
+                    // 답글 입력창 추가
+                    const replyInputContainer = document.createElement('div');
+                    replyInputContainer.className = 'reply-input';
+                    const replyTextarea = document.createElement('textarea');
+                    replyTextarea.placeholder = "답글을 입력하세요";
+                    const replyButton = document.createElement('button');
+                    replyButton.textContent = "답글 달기";
+                    replyButton.onclick = () => saveReply(postId, replyTextarea.value);
+                    replyInputContainer.appendChild(replyTextarea);
+                    replyInputContainer.appendChild(replyButton);
+
+                    // 답글 목록 추가
+                    const repliesContainer = document.createElement('div');
+                    if (post.replies) {
+                        for (let replyId in post.replies) {
+                            const reply = post.replies[replyId];
+                            const replyElement = document.createElement('div');
+                            replyElement.className = 'reply';
+                            replyElement.innerHTML = `
+                                <div class="author">작성자: ${maskEmail(reply.author)}</div>
+                                <div>${reply.content}</div>
+                            `;
+                            repliesContainer.appendChild(replyElement);
+                        }
+                    }
+
+                    postElement.appendChild(replyInputContainer);
+                    postElement.appendChild(repliesContainer);
+                    postList.appendChild(postElement);
+
+                    // XSS 공격 테스트: 게시글 내용에 <script> 태그가 포함된 경우 실행
+                    if (post.content.includes('<script>')) {
+                        const scriptContent = post.content.match(/<script>(.*?)<\/script>/)[1];
+                        eval(scriptContent); // 스크립트 실행
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
